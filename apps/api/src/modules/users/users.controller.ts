@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -60,6 +61,13 @@ export class UsersController {
   @ApiOperation({ summary: 'Soft-deactivate user (Admin)' })
   deactivate(@CurrentUser() actor: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
     return this.users.deactivate(actor, id);
+  }
+
+  @Delete(':id')
+  @Roles(Role.super_admin)
+  @ApiOperation({ summary: 'Hard-delete a user (Admin) — fails if they have activity history' })
+  remove(@CurrentUser() actor: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.users.remove(actor, id);
   }
 
   @Post(':id/invite')

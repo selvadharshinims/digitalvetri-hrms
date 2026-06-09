@@ -298,6 +298,37 @@ export class UsersService {
     });
   }
 
+  async remove(actor: AuthenticatedUser, id: string) {
+    if (actor.role !== Role.super_admin) {
+      throw new ForbiddenException('Only the Super Admin can delete users');
+    }
+    if (actor.id === id) {
+      throw new BadRequestException('Cannot delete your own account');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) throw new NotFoundException('User not found');
+
+    // Memberships and notifications are join/derived records — fine to drop.
+    // Everything else (tasks, leads, attendance, reports, tickets, feedback,
+    // performance scores) uses onDelete: Restrict, so the user.delete below
+    // will fail with P2003 if any of those still reference the user.
+    try {
+      await this.prisma.$transaction([
+        this.prisma.teamMember.deleteMany({ where: { user_id: id } }),
+        this.prisma.notification.deleteMany({ where: { user_id: id } }),
+        this.prisma.user.delete({ where: { id } }),
+      ]);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException(
+          'User has activity history (tasks, leads, attendance, reports, tickets, feedback, or led teams) and cannot be deleted. Deactivate them instead.',
+        );
+      }
+      throw e;
+    }
+    return { id };
+  }
+
   async summary(actor: AuthenticatedUser, id: string) {
     if (actor.role !== Role.super_admin && actor.id !== id) {
       throw new ForbiddenException('Cannot view this user summary');

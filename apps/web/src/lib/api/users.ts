@@ -142,3 +142,38 @@ export function useDeactivateUser() {
     },
   });
 }
+
+export function useReactivateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<User> => {
+      const res = await apiFetch<User>(`/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      });
+      if (!res.data) throw new Error('Reactivate failed');
+      return res.data;
+    },
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user', id] });
+    },
+  });
+}
+
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<{ id: string }> => {
+      const res = await apiFetch<{ id: string }>(`/users/${id}`, { method: 'DELETE' });
+      if (!res.data) throw new Error('Delete failed');
+      return res.data;
+    },
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.removeQueries({ queryKey: ['user', id] });
+      qc.removeQueries({ queryKey: ['user-summary', id] });
+    },
+  });
+}

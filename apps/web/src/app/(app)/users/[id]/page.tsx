@@ -9,7 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { useDeactivateUser, useGetUser, useInviteUser, useUserSummary } from '@/lib/api/users';
+import {
+  useDeactivateUser,
+  useDeleteUser,
+  useGetUser,
+  useInviteUser,
+  useReactivateUser,
+  useUserSummary,
+} from '@/lib/api/users';
 import { useAuthStore } from '@/lib/auth-store';
 
 export default function UserDetailPage() {
@@ -19,9 +26,12 @@ export default function UserDetailPage() {
   const userQuery = useGetUser(params.id);
   const summaryQuery = useUserSummary(params.id);
   const deactivate = useDeactivateUser();
+  const reactivate = useReactivateUser();
+  const deleteUser = useDeleteUser();
   const invite = useInviteUser();
   const [inviteResult, setInviteResult] = useState<InviteUserResponse | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   if (userQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -34,10 +44,32 @@ export default function UserDetailPage() {
   const isAdmin = me?.role === 'super_admin';
   const isSelf = me?.id === u.id;
   const canDeactivate = isAdmin && !isSelf && u.status === 'active';
+  const canReactivate = isAdmin && u.status === 'inactive';
+  const canDelete = isAdmin && !isSelf;
 
   async function handleDeactivate() {
     if (!confirm(`Deactivate ${u.full_name}? They will lose access immediately.`)) return;
     await deactivate.mutateAsync(u.id);
+  }
+
+  async function handleReactivate() {
+    await reactivate.mutateAsync(u.id);
+  }
+
+  async function handleDelete() {
+    if (
+      !confirm(
+        `Permanently delete ${u.full_name}? This removes the account and cannot be undone. If they have any activity history (tasks, leads, attendance, etc.) the delete will fail — deactivate instead.`,
+      )
+    )
+      return;
+    setDeleteError(null);
+    try {
+      await deleteUser.mutateAsync(u.id);
+      router.push('/users');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete user');
+    }
   }
 
   async function handleResendInvite() {
@@ -68,18 +100,33 @@ export default function UserDetailPage() {
                 {invite.isPending ? 'Sending…' : 'Resend invite'}
               </Button>
             )}
+            {canReactivate && (
+              <Button onClick={handleReactivate} disabled={reactivate.isPending}>
+                {reactivate.isPending ? 'Reactivating…' : 'Reactivate'}
+              </Button>
+            )}
             {canDeactivate && (
               <Button variant="destructive" onClick={handleDeactivate} disabled={deactivate.isPending}>
                 {deactivate.isPending ? 'Deactivating…' : 'Deactivate'}
+              </Button>
+            )}
+            {canDelete && (
+              <Button variant="destructive" onClick={handleDelete} disabled={deleteUser.isPending}>
+                {deleteUser.isPending ? 'Deleting…' : 'Delete'}
               </Button>
             )}
           </>
         }
       />
 
-      {(inviteResult || inviteError) && (
+      {(inviteResult || inviteError || deleteError) && (
         <Card>
           <CardContent className="space-y-2 pt-5">
+            {deleteError && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {deleteError}
+              </p>
+            )}
             {inviteError && (
               <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                 {inviteError}
