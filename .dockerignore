@@ -1,0 +1,36 @@
+# Anything not needed inside Docker build contexts.
+
+# Dependencies & build outputs
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+
+# Local-only env files (env is provided via compose / runtime)
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Editor / OS
+.git
+.gitignore
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
+
+# Logs
+**/*.log
+**/npm-debug.log*
+**/pnpm-debug.log*
+
+# Test artifacts
+**/__snapshots__
+
+# Docker artifacts
+**/Dockerfile
+**/.dockerignore
+
+# Unrelated sibling project bundled in this folder
+shadow-market-mobile-template-master

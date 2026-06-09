@@ -1,0 +1,32 @@
+{
+  "name": "dv-wms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DigitalVetri Internal Workforce Management System",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "dev:api": "pnpm --filter @dv-wms/api dev",
+    "dev:web": "pnpm --filter @dv-wms/web dev",
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @dv-wms/api prisma:migrate",
+    "db:studio": "pnpm --filter @dv-wms/api prisma:studio",
+    "docker:build": "docker compose --profile app build",
+    "docker:up": "docker compose --profile app up -d",
+    "docker:down": "docker compose --profile app down",
+    "docker:logs": "docker compose logs -f api web"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

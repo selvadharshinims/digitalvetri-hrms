@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src/**/*", "prisma/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

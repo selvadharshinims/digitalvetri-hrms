@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dvwms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dvwms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dvwms_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-dvwms}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - dvwms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dvwms} -d ${POSTGRES_DB:-dvwms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: dvwms-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - dvwms_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── App services ────────────────────────────────────────────────────────
+  # Opt in via `docker compose --profile app up` so the default `up` still
+  # only brings postgres + redis (the local dev flow uses `pnpm dev`).
+  api:
+    profiles: ["app"]
+    image: dv-wms-api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: dvwms-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      API_PREFIX: api/v1
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dvwms}:${POSTGRES_PASSWORD:-dvwms_local_password}@postgres:5432/${POSTGRES_DB:-dvwms}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-DV-WMS <no-reply@digitalvetri.com>}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-7}
+      WHATSAPP_META_PHONE_NUMBER_ID: ${WHATSAPP_META_PHONE_NUMBER_ID:-}
+      WHATSAPP_META_ACCESS_TOKEN: ${WHATSAPP_META_ACCESS_TOKEN:-}
+      WHATSAPP_META_GRAPH_VERSION: ${WHATSAPP_META_GRAPH_VERSION:-v21.0}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/v1/health | grep -q '\"status\":\"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    profiles: ["app"]
+    image: dv-wms-web
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* must be set at build time — they're baked into the
+        # client bundle.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-DV-WMS}
+    container_name: dvwms-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  dvwms_pgdata:
+  dvwms_redisdata:

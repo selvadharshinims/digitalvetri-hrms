@@ -1,0 +1,512 @@
+// DV-WMS Prisma schema
+// Mirrors PRD §11 — Database Design. Conventions: snake_case columns, UUID PKs,
+// created_at/updated_at on all relevant tables, soft-deletes via status flags.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  super_admin
+  team_leader
+  intern
+}
+
+enum UserStatus {
+  active
+  inactive
+  completed
+}
+
+enum LeadStatus {
+  new
+  contacted
+  interested
+  follow_up
+  converted
+  lost
+  invalid
+}
+
+enum ProjectStatus {
+  planning
+  in_progress
+  on_hold
+  completed
+  cancelled
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  in_review
+  completed
+  blocked
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  leave
+  half_day
+  late
+}
+
+enum TicketType {
+  technical
+  leave_request
+  project_support
+  access_request
+  general
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Users & Teams
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  full_name                String
+  email                    String     @unique
+  phone                    String?
+  whatsapp_enabled         Boolean    @default(false)
+  password_hash            String
+  invite_token             String?    @unique
+  invite_token_expires_at  DateTime?
+  role            Role       @default(intern)
+  photo_url       String?
+  dob             DateTime?  @db.Date
+  address         String?
+  college         String?
+  degree          String?
+  year_of_study   String?
+  department      String?
+  internship_role String?
+  joining_date    DateTime?  @db.Date
+  status          UserStatus @default(active)
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+
+  // Relations
+  led_teams              Team[]                @relation("TeamLeader")
+  memberships            TeamMember[]
+  assigned_leads         Lead[]                @relation("LeadAssignee")
+  lead_activities        LeadActivity[]
+  created_tasks          Task[]                @relation("TaskCreator")
+  assigned_tasks         Task[]                @relation("TaskAssignee")
+  task_activities        TaskActivity[]
+  attendance_records     Attendance[]          @relation("AttendanceOwner")
+  attendance_marks_made  Attendance[]          @relation("AttendanceMarker")
+  daily_reports          DailyReport[]         @relation("DailyReportAuthor")
+  daily_reports_reviewed DailyReport[]         @relation("DailyReportReviewer")
+  tickets_raised         Ticket[]              @relation("TicketRaiser")
+  tickets_assigned       Ticket[]              @relation("TicketAssignee")
+  ticket_messages        TicketMessage[]
+  performance_scores     PerformanceScore[]
+  feedback_received      PerformanceFeedback[] @relation("FeedbackSubject")
+  feedback_given         PerformanceFeedback[] @relation("FeedbackLeader")
+  notifications          Notification[]
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Team {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  category    String?
+  leader_id   String?  @db.Uuid
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  leader   User?        @relation("TeamLeader", fields: [leader_id], references: [id], onDelete: Restrict)
+  members  TeamMember[]
+  leads    Lead[]
+  projects Project[]
+  tickets  Ticket[]
+
+  @@index([is_active])
+  @@map("teams")
+}
+
+model TeamMember {
+  id         String   @id @default(uuid()) @db.Uuid
+  team_id    String   @db.Uuid
+  user_id    String   @db.Uuid
+  is_primary Boolean  @default(false)
+  joined_at  DateTime @default(now())
+
+  team Team @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Restrict)
+
+  @@unique([team_id, user_id])
+  @@index([user_id])
+  @@map("team_members")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leads
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Lead {
+  id               String     @id @default(uuid()) @db.Uuid
+  name             String
+  phone            String?
+  email            String?
+  source           String?
+  service_interest String?
+  location         String?
+  notes            String?
+  estimated_value  Decimal?   @db.Decimal(12, 2)
+  status           LeadStatus @default(new)
+  assigned_to      String?    @db.Uuid
+  team_id          String?    @db.Uuid
+  next_follow_up   DateTime?  @db.Date
+  deal_value       Decimal?   @db.Decimal(12, 2)
+  converted_at     DateTime?
+  last_activity_at DateTime?
+  // AI-generated conversion likelihood. Persisted so the score is visible on
+  // the lead list without re-calling Claude on every page load. Re-run by an
+  // admin/leader via POST /leads/score.
+  ai_score         Int?
+  ai_score_band    String?
+  ai_score_signal  String?
+  ai_score_action  String?
+  ai_score_model   String?
+  ai_score_at      DateTime?
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+
+  assignee   User?          @relation("LeadAssignee", fields: [assigned_to], references: [id], onDelete: Restrict)
+  team       Team?          @relation(fields: [team_id], references: [id], onDelete: Restrict)
+  activities LeadActivity[]
+  tasks      Task[]
+
+  @@index([assigned_to, status])
+  @@index([team_id, status])
+  @@index([status])
+  @@index([last_activity_at])
+  @@index([next_follow_up])
+  @@index([ai_score])
+  @@map("leads")
+}
+
+model LeadActivity {
+  id          String      @id @default(uuid()) @db.Uuid
+  lead_id     String      @db.Uuid
+  actor_id    String      @db.Uuid
+  from_status LeadStatus?
+  to_status   LeadStatus?
+  note        String?
+  created_at  DateTime    @default(now())
+
+  lead  Lead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actor_id], references: [id], onDelete: Restrict)
+
+  @@index([lead_id, created_at])
+  @@map("lead_activities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Projects & Tasks
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Project {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  description  String?
+  client_name  String?
+  category     String?
+  team_id      String        @db.Uuid
+  status       ProjectStatus @default(planning)
+  progress_pct Int           @default(0)
+  start_date   DateTime?     @db.Date
+  deadline     DateTime?     @db.Date
+  // AI-assessed delivery risk. Persisted so the project board can color-code
+  // without re-calling Claude on every page load. Re-run by an admin/leader
+  // via POST /projects/assess-risk.
+  ai_risk_score   Int?
+  ai_risk_band    String?
+  ai_risk_concern String?
+  ai_risk_actions Json?
+  ai_risk_model   String?
+  ai_risk_at      DateTime?
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @updatedAt
+
+  team         Team                 @relation(fields: [team_id], references: [id], onDelete: Restrict)
+  deliverables ProjectDeliverable[]
+  tasks        Task[]
+
+  @@index([team_id, status])
+  @@index([status])
+  @@index([deadline])
+  @@index([ai_risk_score])
+  @@map("projects")
+}
+
+model ProjectDeliverable {
+  id         String   @id @default(uuid()) @db.Uuid
+  project_id String   @db.Uuid
+  title      String
+  is_done    Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+  @@map("project_deliverables")
+}
+
+model Task {
+  id           String       @id @default(uuid()) @db.Uuid
+  title        String
+  description  String?
+  assignee_id  String?      @db.Uuid
+  project_id   String?      @db.Uuid
+  lead_id      String?      @db.Uuid
+  created_by   String       @db.Uuid
+  priority     TaskPriority @default(medium)
+  status       TaskStatus   @default(todo)
+  progress_pct Int          @default(0)
+  block_reason String?
+  due_date     DateTime?    @db.Date
+  completed_at DateTime?
+  created_at   DateTime     @default(now())
+  updated_at   DateTime     @updatedAt
+
+  assignee   User?          @relation("TaskAssignee", fields: [assignee_id], references: [id], onDelete: Restrict)
+  creator    User           @relation("TaskCreator", fields: [created_by], references: [id], onDelete: Restrict)
+  project    Project?       @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  lead       Lead?          @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+  activities TaskActivity[]
+
+  @@index([assignee_id, status])
+  @@index([project_id, status])
+  @@index([status])
+  @@index([due_date])
+  @@map("tasks")
+}
+
+model TaskActivity {
+  id         String   @id @default(uuid()) @db.Uuid
+  task_id    String   @db.Uuid
+  actor_id   String   @db.Uuid
+  action     String
+  note       String?
+  created_at DateTime @default(now())
+
+  task  Task @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actor_id], references: [id], onDelete: Restrict)
+
+  @@index([task_id, created_at])
+  @@map("task_activities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance & Reports
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Attendance {
+  id         String           @id @default(uuid()) @db.Uuid
+  user_id    String           @db.Uuid
+  date       DateTime         @db.Date
+  status     AttendanceStatus
+  check_in   DateTime?
+  check_out  DateTime?
+  marked_by  String?          @db.Uuid
+  notes      String?
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+
+  user   User  @relation("AttendanceOwner", fields: [user_id], references: [id], onDelete: Restrict)
+  marker User? @relation("AttendanceMarker", fields: [marked_by], references: [id], onDelete: Restrict)
+
+  @@unique([user_id, date])
+  @@index([date, status])
+  @@map("attendance")
+}
+
+model DailyReport {
+  id              String   @id @default(uuid()) @db.Uuid
+  user_id         String   @db.Uuid
+  report_date     DateTime @db.Date
+  todays_work     String
+  challenges      String?
+  learnings       String?
+  tomorrows_plan  String?
+  is_locked       Boolean  @default(false)
+  reviewed_by     String?  @db.Uuid
+  review_note     String?
+  reviewed_at     DateTime?
+  submitted_late  Boolean  @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  author   User  @relation("DailyReportAuthor", fields: [user_id], references: [id], onDelete: Restrict)
+  reviewer User? @relation("DailyReportReviewer", fields: [reviewed_by], references: [id], onDelete: Restrict)
+
+  @@unique([user_id, report_date])
+  @@index([report_date])
+  @@map("daily_reports")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tickets
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Ticket {
+  id          String         @id @default(uuid()) @db.Uuid
+  raised_by   String         @db.Uuid
+  type        TicketType
+  priority    TicketPriority @default(medium)
+  title       String
+  description String
+  status      TicketStatus   @default(open)
+  assigned_to String?        @db.Uuid
+  team_id     String?        @db.Uuid
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+  closed_at   DateTime?
+
+  raiser   User            @relation("TicketRaiser", fields: [raised_by], references: [id], onDelete: Restrict)
+  assignee User?           @relation("TicketAssignee", fields: [assigned_to], references: [id], onDelete: Restrict)
+  team     Team?           @relation(fields: [team_id], references: [id], onDelete: SetNull)
+  messages TicketMessage[]
+
+  @@index([status, priority])
+  @@index([raised_by, status])
+  @@index([assigned_to, status])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid()) @db.Uuid
+  ticket_id  String   @db.Uuid
+  sender_id  String   @db.Uuid
+  message    String
+  created_at DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  sender User   @relation(fields: [sender_id], references: [id], onDelete: Restrict)
+
+  @@index([ticket_id, created_at])
+  @@map("ticket_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Performance
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PerformanceScore {
+  id                String   @id @default(uuid()) @db.Uuid
+  user_id           String   @db.Uuid
+  period_start      DateTime @db.Date
+  period_end        DateTime @db.Date
+  attendance_score  Decimal  @db.Decimal(5, 2)
+  task_score        Decimal  @db.Decimal(5, 2)
+  lead_score        Decimal  @db.Decimal(5, 2)
+  project_score     Decimal  @db.Decimal(5, 2)
+  feedback_score    Decimal  @db.Decimal(5, 2)
+  discipline_score  Decimal  @db.Decimal(5, 2)
+  total_score       Decimal  @db.Decimal(5, 2)
+  weights_used      Json
+  computed_at       DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Restrict)
+
+  @@unique([user_id, period_start, period_end])
+  @@index([period_end, total_score])
+  @@map("performance_scores")
+}
+
+model PerformanceFeedback {
+  id            String   @id @default(uuid()) @db.Uuid
+  user_id       String   @db.Uuid
+  leader_id     String   @db.Uuid
+  period_start  DateTime @db.Date
+  period_end    DateTime @db.Date
+  quality       Int
+  ownership     Int
+  collaboration Int
+  note          String?
+  created_at    DateTime @default(now())
+
+  subject User @relation("FeedbackSubject", fields: [user_id], references: [id], onDelete: Restrict)
+  leader  User @relation("FeedbackLeader", fields: [leader_id], references: [id], onDelete: Restrict)
+
+  @@unique([user_id, leader_id, period_start, period_end])
+  @@index([user_id, period_end])
+  @@map("performance_feedback")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications & Config
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  type       String
+  title      String
+  body       String?
+  link       String?
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read, created_at])
+  @@map("notifications")
+}
+
+// Single-row config table — only one active row enforced via the unique key.
+model ScoringConfig {
+  id              String   @id @default(uuid()) @db.Uuid
+  is_active       Boolean  @unique @default(true)
+  weights         Json
+  stale_lead_days Int      @default(3)
+  report_cutoff   String   @default("19:00")
+  work_start_time String   @default("10:00")
+  scoring_period_days Int  @default(30)
+  lead_activity_target Int @default(20)
+  updated_at      DateTime @updatedAt
+  updated_by      String?  @db.Uuid
+
+  @@map("scoring_config")
+}
