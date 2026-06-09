@@ -67,4 +67,4 @@ ENTRYPOINT ["/sbin/tini", "--"]
 # Apply any new migrations on boot, then start the API. `migrate deploy` is
 # safe in production: it only forward-applies pending migrations and never
 # drops data the way `db push --accept-data-loss` can.
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/src/main.js"]
