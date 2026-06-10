@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { LEAD_STATUSES, type LeadStatus } from '@dv-wms/types';
-import { LeadScoreBadge } from '@/components/lead-score-badge';
 import { LeadStatusBadge } from '@/components/lead-status-badge';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -55,14 +54,22 @@ export default function LeadDetailPage() {
 
   async function handleStatus(e: React.FormEvent) {
     e.preventDefault();
-    if (!nextStatus) return;
     setError(null);
+    if (!nextStatus) {
+      setError('Pick a status first.');
+      return;
+    }
+    const parsedDeal = dealValue ? Number(dealValue) : 0;
+    if (nextStatus === 'converted' && (!parsedDeal || parsedDeal <= 0)) {
+      setError('Deal value (₹) is required when marking the lead as converted.');
+      return;
+    }
     try {
       await changeStatus.mutateAsync({
         status: nextStatus,
         note: note.trim() || undefined,
         next_follow_up: followUp || undefined,
-        deal_value: dealValue ? Number(dealValue) : undefined,
+        deal_value: parsedDeal > 0 ? parsedDeal : undefined,
       });
       setNextStatus('');
       setNote('');
@@ -119,11 +126,6 @@ export default function LeadDetailPage() {
             <CardContent className="space-y-4 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <LeadStatusBadge status={l.status} />
-                <LeadScoreBadge
-                  score={l.ai_score}
-                  band={l.ai_score_band}
-                  scoredAt={l.ai_score_at}
-                />
                 {l.next_follow_up && (
                   <Badge variant="warning">
                     Follow-up {new Date(l.next_follow_up).toLocaleDateString()}
@@ -132,29 +134,6 @@ export default function LeadDetailPage() {
                 {l.team && <Badge variant="muted">{l.team.name}</Badge>}
                 {l.source && <Badge variant="outline">{l.source}</Badge>}
               </div>
-
-              {l.ai_score !== null && (l.ai_score_signal || l.ai_score_action) && (
-                <div className="rounded-md border bg-muted/30 p-3">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                    AI score · {l.ai_score} {l.ai_score_band && `(${l.ai_score_band})`}
-                    {l.ai_score_at && (
-                      <span className="ml-2 normal-case">
-                        scored {new Date(l.ai_score_at).toLocaleString()}
-                      </span>
-                    )}
-                  </p>
-                  {l.ai_score_signal && (
-                    <p className="mt-1 text-sm">
-                      <span className="font-medium">Signal:</span> {l.ai_score_signal}
-                    </p>
-                  )}
-                  {l.ai_score_action && (
-                    <p className="mt-1 text-sm">
-                      <span className="font-medium">Next:</span> {l.ai_score_action}
-                    </p>
-                  )}
-                </div>
-              )}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Service interest" value={l.service_interest} />
@@ -198,7 +177,6 @@ export default function LeadDetailPage() {
                     <Select
                       value={nextStatus}
                       onChange={(e) => setNextStatus(e.target.value as LeadStatus | '')}
-                      required
                     >
                       <option value="">Choose…</option>
                       {LEAD_STATUSES.map((s) => (
@@ -221,10 +199,10 @@ export default function LeadDetailPage() {
                       <Label>Deal value (₹) *</Label>
                       <Input
                         type="number"
-                        min="0"
+                        min="1"
                         value={dealValue}
                         onChange={(e) => setDealValue(e.target.value)}
-                        required
+                        placeholder="Required for converted leads"
                       />
                     </div>
                   )}

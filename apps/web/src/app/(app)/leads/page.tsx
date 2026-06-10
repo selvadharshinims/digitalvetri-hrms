@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { LEAD_STATUSES, type LeadStatus } from '@dv-wms/types';
-import { LeadScoreBadge } from '@/components/lead-score-badge';
 import { LeadStatusBadge } from '@/components/lead-status-badge';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useLeadFunnel, useListLeads, useScoreLeads } from '@/lib/api/leads';
+import { useLeadFunnel, useListLeads } from '@/lib/api/leads';
 import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/utils';
 
@@ -53,7 +52,6 @@ export default function LeadsPage() {
         actions={
           canCreate && (
             <>
-              <ScoreWithAiButton />
               <Button variant="outline" asChild>
                 <Link href="/leads/import">Import</Link>
               </Button>
@@ -118,7 +116,6 @@ export default function LeadsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Lead</TableHead>
-                <TableHead>AI score</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Assignee</TableHead>
                 <TableHead>Team</TableHead>
@@ -129,21 +126,21 @@ export default function LeadsPage() {
             <TableBody>
               {list.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               )}
               {list.isError && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-destructive">
+                  <TableCell colSpan={6} className="text-center text-destructive">
                     {(list.error as Error).message}
                   </TableCell>
                 </TableRow>
               )}
               {list.data?.data.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No leads match these filters.
                   </TableCell>
                 </TableRow>
@@ -157,13 +154,6 @@ export default function LeadsPage() {
                     <p className="text-xs text-muted-foreground">
                       {[l.phone, l.email].filter(Boolean).join(' · ')}
                     </p>
-                  </TableCell>
-                  <TableCell>
-                    <LeadScoreBadge
-                      score={l.ai_score}
-                      band={l.ai_score_band}
-                      scoredAt={l.ai_score_at}
-                    />
                   </TableCell>
                   <TableCell>
                     <LeadStatusBadge status={l.status} />
@@ -214,35 +204,3 @@ export default function LeadsPage() {
   );
 }
 
-function ScoreWithAiButton() {
-  const score = useScoreLeads();
-  const [error, setError] = useState<string | null>(null);
-  const [lastCount, setLastCount] = useState<number | null>(null);
-
-  async function handleClick() {
-    setError(null);
-    try {
-      const r = await score.mutateAsync({});
-      setLastCount(r.scored.length);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Scoring failed');
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        onClick={handleClick}
-        disabled={score.isPending}
-        title="AI-scores up to 30 open in-scope leads"
-      >
-        {score.isPending ? 'Scoring…' : 'Score with AI'}
-      </Button>
-      {error && <span className="text-xs text-destructive">{error}</span>}
-      {!error && lastCount !== null && (
-        <span className="text-xs text-muted-foreground">Scored {lastCount}</span>
-      )}
-    </div>
-  );
-}
