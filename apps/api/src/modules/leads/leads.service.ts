@@ -334,15 +334,16 @@ export class LeadsService {
     const phones = dto.rows.map((r) => r.phone).filter((p): p is string => !!p);
     const emails = dto.rows.map((r) => r.email?.toLowerCase()).filter((e): e is string => !!e);
 
-    const existing = await this.prisma.lead.findMany({
-      where: {
-        OR: [
-          phones.length ? { phone: { in: phones } } : { id: '' },
-          emails.length ? { email: { in: emails } } : { id: '' },
-        ],
-      },
-      select: { phone: true, email: true },
-    });
+    const dedupeOr: Prisma.LeadWhereInput[] = [];
+    if (phones.length) dedupeOr.push({ phone: { in: phones } });
+    if (emails.length) dedupeOr.push({ email: { in: emails } });
+
+    const existing = dedupeOr.length
+      ? await this.prisma.lead.findMany({
+          where: { OR: dedupeOr },
+          select: { phone: true, email: true },
+        })
+      : [];
     const existingPhones = new Set(existing.map((e) => e.phone).filter(Boolean));
     const existingEmails = new Set(existing.map((e) => e.email?.toLowerCase()).filter(Boolean));
 
