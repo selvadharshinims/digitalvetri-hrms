@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-#
 # Multi-stage Docker build for the DV-WMS NestJS API.
 #
 # Stage 1 (builder): install all workspace deps, generate the Prisma client,
