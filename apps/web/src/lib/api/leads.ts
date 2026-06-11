@@ -186,6 +186,25 @@ export function useUpdateLead(id: string) {
   });
 }
 
+export function useBulkDeleteLeads() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]): Promise<{ deleted: number }> => {
+      const res = await apiFetch<{ deleted: number }>(`/leads/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.data) throw new Error('Bulk delete failed');
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['leads-funnel'] });
+    },
+  });
+}
+
 /**
  * AI-scores leads in batch. With no body, scores the top open in-scope leads
  * (server caps at 30 per call). Returns 503 if ANTHROPIC_API_KEY isn't set.

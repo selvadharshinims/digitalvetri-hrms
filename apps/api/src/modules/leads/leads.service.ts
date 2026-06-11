@@ -324,6 +324,18 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Hard-deletes the listed leads. Admin-only — enforced at the controller.
+   * LeadActivity rows cascade away (FK onDelete: Cascade). Linked tasks get
+   * their `lead_id` nulled (FK onDelete: SetNull). Returns the actual number
+   * of rows that were deleted (≤ ids.length if some ids were stale).
+   */
+  async bulkDelete(ids: string[]): Promise<{ deleted: number }> {
+    const result = await this.prisma.lead.deleteMany({ where: { id: { in: ids } } });
+    this.logger.log(`Bulk delete: ${result.count} of ${ids.length} requested lead(s) removed`);
+    return { deleted: result.count };
+  }
+
   async importMany(actor: AuthenticatedUser, dto: ImportLeadsDto) {
     if (actor.role === Role.intern) {
       throw new ForbiddenException('Only admins or team leaders can import leads');

@@ -12,8 +12,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { CurrentUser, type AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { AssignLeadDto } from './dto/assign-lead.dto';
+import { BulkDeleteLeadsDto } from './dto/bulk-delete-leads.dto';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { ImportLeadsDto } from './dto/import-leads.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
@@ -59,6 +62,14 @@ export class LeadsController {
   @ApiOperation({ summary: 'Bulk import — dedupes on phone/email' })
   import(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportLeadsDto) {
     return this.leads.importMany(user, dto);
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.super_admin)
+  @ApiOperation({ summary: 'Hard-delete a batch of leads (admin only)' })
+  bulkDelete(@Body() dto: BulkDeleteLeadsDto) {
+    return this.leads.bulkDelete(dto.ids);
   }
 
   @Post('score')
