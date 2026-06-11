@@ -47,9 +47,9 @@ export default function LeadDetailPage() {
   const l = lead.data;
   const canModify =
     me?.role === 'super_admin' ||
-    (me?.role === 'team_leader' && (l.team_id ? me.led_team_ids.includes(l.team_id) : false)) ||
-    (me?.role === 'team_leader' && l.assigned_to === me.id) ||
-    (me?.role === 'intern' && l.assigned_to === me.id);
+    l.assigned_to === me?.id ||
+    (me?.role === 'team_leader' && !!l.team_id && me.led_team_ids.includes(l.team_id)) ||
+    (me?.role === 'intern' && !!l.team_id && me.member_team_ids.includes(l.team_id));
   const canReassign = me?.role === 'super_admin' || me?.role === 'team_leader';
 
   async function handleStatus(e: React.FormEvent) {

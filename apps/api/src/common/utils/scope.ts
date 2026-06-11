@@ -69,19 +69,27 @@ export function leadScopeWhere(user: AuthenticatedUser): Prisma.LeadWhereInput {
 }
 
 /**
- * Can the user modify (assign/edit/change status of) a specific lead?
- * Mirrors §5.2 — assignees can update status; leaders manage team leads; admin everything.
+ * Can the user modify (edit/change status of) a specific lead?
+ *   Admin: always.
+ *   Team leader: leads they're assigned to OR in a team they lead.
+ *   Intern: leads they're assigned to OR in a team they belong to (so a
+ *     teammate can pick up a freshly-imported team lead without needing
+ *     the leader to assign it first).
+ *
+ * NB: lead assignment itself is leader-or-admin only — that check lives on
+ * the assign endpoint, not here.
  */
 export function canManageLead(
   user: AuthenticatedUser,
   lead: { assigned_to: string | null; team_id: string | null },
 ): boolean {
   if (user.role === 'super_admin') return true;
+  if (lead.assigned_to === user.id) return true;
+  if (lead.team_id === null) return false;
   if (user.role === 'team_leader') {
-    if (lead.assigned_to === user.id) return true;
-    return lead.team_id !== null && user.led_team_ids.includes(lead.team_id);
+    return user.led_team_ids.includes(lead.team_id);
   }
-  return lead.assigned_to === user.id;
+  return user.member_team_ids.includes(lead.team_id);
 }
 
 /**
