@@ -258,8 +258,16 @@ export class LeadsService {
   }
 
   async assign(actor: AuthenticatedUser, id: string, dto: AssignLeadDto) {
+    // Interns can claim leads in their team for themselves (so the admin
+    // doesn't have to assign every call after the fact), but can't hand off
+    // to someone else or move the lead to a different team.
     if (actor.role === Role.intern) {
-      throw new ForbiddenException('Only admins or team leaders can assign leads');
+      if (dto.assignee_id !== actor.id) {
+        throw new ForbiddenException('Interns can only assign leads to themselves');
+      }
+      if (dto.team_id) {
+        throw new ForbiddenException('Interns cannot change a lead’s team');
+      }
     }
     const existing = await this.requireManageable(actor, id);
     await this.validateAssignmentTargets(dto.team_id, dto.assignee_id);

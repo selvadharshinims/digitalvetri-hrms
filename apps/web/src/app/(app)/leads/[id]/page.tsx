@@ -51,6 +51,13 @@ export default function LeadDetailPage() {
     (me?.role === 'team_leader' && !!l.team_id && me.led_team_ids.includes(l.team_id)) ||
     (me?.role === 'intern' && !!l.team_id && me.member_team_ids.includes(l.team_id));
   const canReassign = me?.role === 'super_admin' || me?.role === 'team_leader';
+  // Interns claim leads in their team for themselves — no per-call assignment
+  // from admin needed. Hidden once they already own it.
+  const canClaim =
+    me?.role === 'intern' &&
+    !!l.team_id &&
+    me.member_team_ids.includes(l.team_id) &&
+    l.assigned_to !== me.id;
 
   async function handleStatus(e: React.FormEvent) {
     e.preventDefault();
@@ -88,6 +95,16 @@ export default function LeadDetailPage() {
       setAssignee('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Assign failed');
+    }
+  }
+
+  async function handleClaim() {
+    if (!me) return;
+    setError(null);
+    try {
+      await assign.mutateAsync(me.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Claim failed');
     }
   }
 
@@ -232,6 +249,24 @@ export default function LeadDetailPage() {
         </div>
 
         <div className="space-y-6">
+          {canClaim && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Take this lead</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  {l.assignee
+                    ? `Currently with ${l.assignee.full_name}. Claiming it will reassign it to you.`
+                    : "Nobody's on this lead yet. Claim it before you start the call so the admin doesn't have to."}
+                </p>
+                <Button onClick={handleClaim} disabled={assign.isPending}>
+                  {assign.isPending ? 'Claiming…' : 'Assign to me'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {canReassign && (
             <Card>
               <CardHeader>
