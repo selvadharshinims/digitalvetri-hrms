@@ -46,7 +46,9 @@ export function canManageTeam(user: AuthenticatedUser, teamId: string): boolean 
  * Returns the Prisma `where` filter for Lead rows the caller can see.
  *   super_admin → all leads
  *   team_leader → leads in teams they lead (or assigned to themselves)
- *   intern      → leads assigned to themselves
+ *   intern      → leads assigned to themselves OR in a team they belong to
+ *                 (so a freshly-imported team batch is visible before
+ *                 anyone is individually assigned)
  */
 export function leadScopeWhere(user: AuthenticatedUser): Prisma.LeadWhereInput {
   if (user.role === 'super_admin') return {};
@@ -58,7 +60,12 @@ export function leadScopeWhere(user: AuthenticatedUser): Prisma.LeadWhereInput {
       ],
     };
   }
-  return { assigned_to: user.id };
+  return {
+    OR: [
+      { assigned_to: user.id },
+      { team_id: { in: user.member_team_ids } },
+    ],
+  };
 }
 
 /**
